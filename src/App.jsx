@@ -3,7 +3,6 @@ import { useAuth, AuthProvider } from './context/AuthContext';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-// Pages
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import VendorList from './pages/vendors/VendorList';
@@ -11,11 +10,9 @@ import VendorForm from './pages/vendors/VendorForm';
 import POList from './pages/po/POList';
 import POCreate from './pages/po/POCreate';
 import PODetail from './pages/po/PODetail';
-
-// Layout
+import ItemList from './pages/items/ItemList';
 import Layout from './components/layout/Layout';
-
-// Protected Route
+console.log('App version 2 loaded');
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
   if (loading) return <div className="flex items-center justify-center h-screen">Loading...</div>;
@@ -36,6 +33,7 @@ const AppRoutes = () => {
         <Route path="po" element={<POList />} />
         <Route path="po/new" element={<POCreate />} />
         <Route path="po/:id" element={<PODetail />} />
+        <Route path="items" element={<ItemList />} />
       </Route>
     </Routes>
   );
