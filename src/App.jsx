@@ -12,6 +12,7 @@ import POCreate from './pages/po/POCreate';
 import PODetail from './pages/po/PODetail';
 import ItemList from './pages/items/ItemList';
 import Layout from './components/layout/Layout';
+import VendorDashboard from './pages/vendors/VendorDashboard';
 console.log('App version 2 loaded');
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -34,6 +35,7 @@ const AppRoutes = () => {
         <Route path="po/new" element={<POCreate />} />
         <Route path="po/:id" element={<PODetail />} />
         <Route path="items" element={<ItemList />} />
+        <Route path="vendor-dashboard" element={<VendorDashboard />} />
       </Route>
     </Routes>
   );

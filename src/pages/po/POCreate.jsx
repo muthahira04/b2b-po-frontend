@@ -1,249 +1,296 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axiosInstance from '../../utils/axiosInstance.jsx';
-import { toast } from 'react-toastify';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import axiosInstance from '../../utils/axiosInstance';
 
-const POCreate = () => {
+const riskColor = (score) => {
+  if (score >= 80) return 'text-green-700 bg-green-100';
+  if (score >= 50) return 'text-yellow-700 bg-yellow-100';
+  return 'text-red-700 bg-red-100';
+};
+
+const riskLabel = (score) => {
+  if (score >= 80) return 'Reliable';
+  if (score >= 50) return 'Average';
+  return 'High Risk';
+};
+
+export default function POCreate() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
   const [vendors, setVendors] = useState([]);
   const [items, setItems] = useState([]);
-  const [formData, setFormData] = useState({
+  const [departments, setDepartments] = useState([]);
+  const [form, setForm] = useState({
     vendorId: '',
+    department: '',
     expectedDelivery: '',
     deliveryAddress: '',
-    notes: ''
+    notes: '',
+    items: [{ itemId: '', quantity: 1 }],
   });
-  const [orderItems, setOrderItems] = useState([
-    { itemId: '', name: '', quantity: 1, unit: 'pcs', unitPrice: 0 }
-  ]);
+  const [budgetWarning, setBudgetWarning] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [previewTotal, setPreviewTotal] = useState(0);
+  const [budgetInfo, setBudgetInfo] = useState(null);
 
   useEffect(() => {
-    fetchVendorsAndItems();
+    axiosInstance.get('/vendors').then((r) => {
+      const data = r.data.vendors || r.data.data || [];
+      const sorted = [...data].sort((a, b) => (b.riskScore || 0) - (a.riskScore || 0));
+      setVendors(sorted);
+    });
+    axiosInstance.get('/items').then((r) => setItems(r.data.items || []));
+    axiosInstance.get('/company/budget').then((r) => setDepartments(r.data.data)).catch(() => {});
   }, []);
 
-  const fetchVendorsAndItems = async () => {
-    try {
-      const [vendorsRes, itemsRes] = await Promise.all([
-        axiosInstance.get('/vendors'),
-        axiosInstance.get('/items')
-      ]);
-      setVendors(vendorsRes.data.vendors);
-      setItems(itemsRes.data.items);
-    } catch (error) {
-      toast.error('Failed to load vendors and items');
+  useEffect(() => {
+    let total = 0;
+   form.items.forEach(({ itemId, quantity }) => {
+      const found = items.find((i) => i._id === itemId);
+      if (found) total += found.standardPrice * quantity;
+    });
+    setPreviewTotal(total);
+
+    if (form.department) {
+      const dept = departments.find((d) => d.name === form.department);
+      if (dept) setBudgetInfo({ ...dept, requested: total });
+      else setBudgetInfo(null);
+    } else {
+      setBudgetInfo(null);
     }
+  }, [form.items, form.department, items, departments]);
+
+  const handleItemChange = (idx, field, value) => {
+    const updated = [...form.items];
+    updated[idx][field] = field === 'quantity' ? Number(value) : value;
+    setForm({ ...form, items: updated });
   };
 
-  const handleItemChange = (index, field, value) => {
-    const updated = [...orderItems];
-    updated[index][field] = value;
-    if (field === 'itemId') {
-      const selectedItem = items.find(i => i._id === value);
-      if (selectedItem) {
-        updated[index].name = selectedItem.name;
-        updated[index].unit = selectedItem.unit;
-        updated[index].unitPrice = selectedItem.standardPrice;
-      }
-    }
-    setOrderItems(updated);
-  };
-
-  const addItem = () => {
-    setOrderItems([...orderItems, { itemId: '', name: '', quantity: 1, unit: 'pcs', unitPrice: 0 }]);
-  };
-
-  const removeItem = (index) => {
-    setOrderItems(orderItems.filter((_, i) => i !== index));
-  };
-
-  const totalAmount = orderItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+  const addItem = () => setForm({ ...form, items: [...form.items, { item: '', quantity: 1 }] });
+  const removeItem = (idx) => setForm({ ...form, items: form.items.filter((_, i) => i !== idx) });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
+    setBudgetWarning(null);
     try {
-      await axiosInstance.post('/po', {
-        ...formData,
-        items: orderItems
-      });
-      toast.success('Purchase Order created successfully');
-      navigate('/po');
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to create PO');
+      const res = await axiosInstance.post('/po', form);
+      if (res.data.budgetWarning) {
+        setBudgetWarning(res.data.budgetWarning);
+      }
+      navigate(`/po/${res.data.data._id}`);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to create PO');
     } finally {
       setLoading(false);
     }
   };
 
+ const selectedVendor = vendors.find((v) => v._id === form.vendorId); 
+  const budgetOver = budgetInfo && budgetInfo.requested > budgetInfo.remaining;
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <button onClick={() => navigate('/po')} className="p-2 hover:bg-gray-100 rounded-lg">
-          <ArrowLeft size={20} />
-        </button>
-        <h1 className="text-2xl font-bold text-gray-900">Create Purchase Order</h1>
-      </div>
+    <div className="max-w-4xl mx-auto p-6">
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">Create Purchase Order</h1>
+
+      {error && (
+        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          {error}
+        </div>
+      )}
+
+      {budgetInfo && (
+        <div className={`mb-4 px-4 py-3 rounded-lg border ${budgetOver ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300'}`}>
+          <div className="flex items-center justify-between mb-1">
+            <span className={`font-semibold text-sm ${budgetOver ? 'text-red-700' : 'text-green-700'}`}>
+              {budgetOver ? '⚠ Budget Exceeded' : '✓ Within Budget'} — {budgetInfo.name}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-4 text-sm mt-2">
+            <div>
+              <p className="text-gray-500">Monthly budget</p>
+              <p className="font-semibold text-gray-800">${budgetInfo.monthlyBudget.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-gray-500">Already spent</p>
+              <p className="font-semibold text-gray-800">${budgetInfo.spent.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-gray-500">Remaining</p>
+              <p className={`font-semibold ${budgetOver ? 'text-red-600' : 'text-green-600'}`}>
+                ${budgetInfo.remaining.toLocaleString()}
+              </p>
+            </div>
+          </div>
+          {budgetOver && (
+            <p className="mt-2 text-sm text-red-600 font-medium">
+              This PO (${previewTotal.toLocaleString()}) exceeds remaining budget by $
+              {(previewTotal - budgetInfo.remaining).toLocaleString()}. It will still be saved as a draft.
+            </p>
+          )}
+          <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className={`h-2 rounded-full transition-all ${budgetOver ? 'bg-red-500' : 'bg-green-500'}`}
+              style={{ width: `${Math.min(100, ((budgetInfo.spent + previewTotal) / budgetInfo.monthlyBudget) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Vendor *</label>
+          <select
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+            value={form.vendorId}
+          onChange={(e) => setForm({ ...form, vendorId: e.target.value })}
+            required
+          >
+            <option value="">Select vendor...</option>
+            {vendors.map((v) => (
+              <option key={v._id} value={v._id}>
+                {v.businessName} — Risk Score: {v.riskScore ?? 'N/A'} ({riskLabel(v.riskScore)})
+              </option>
+            ))}
+          </select>
 
-        {/* Basic Info */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
-          <h2 className="font-semibold text-gray-900">Order Details</h2>
+          <div className="mt-2">
+            <p className="text-xs text-gray-500 mb-1">Top vendors by reliability:</p>
+            <div className="flex flex-wrap gap-2">
+              {vendors.slice(0, 3).map((v) => (
+                <button
+                  key={v._id}
+                  type="button"
+                  onClick={() => setForm({ ...form, vendorId: v._id })}
+                  className={`text-xs px-2 py-1 rounded-full border transition-all ${
+                    form.vendorId === v._id ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:border-blue-300'
+                  }`}
+                >
+                  ★ {v.businessName}
+                  <span className={`ml-1 px-1 rounded text-xs ${riskColor(v.riskScore)}`}>
+                    {v.riskScore ?? '?'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
 
+          {selectedVendor && (
+            <div className={`mt-2 inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full ${riskColor(selectedVendor.riskScore)}`}>
+              Risk score: {selectedVendor.riskScore ?? 'N/A'} — {riskLabel(selectedVendor.riskScore)}
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Vendor *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
             <select
-              value={formData.vendorId}
-              onChange={(e) => setFormData({ ...formData, vendorId: e.target.value })}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              value={form.department}
+              onChange={(e) => setForm({ ...form, department: e.target.value })}
             >
-              <option value="">Select a vendor</option>
-              {vendors.map(v => (
-                <option key={v._id} value={v._id}>{v.businessName}</option>
+              <option value="">Select department...</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.name}>
+                  {d.name} (Remaining: ${d.remaining.toLocaleString()})
+                </option>
               ))}
             </select>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Expected Delivery *</label>
-              <input
-                type="date"
-                value={formData.expectedDelivery}
-                onChange={(e) => setFormData({ ...formData, expectedDelivery: e.target.value })}
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Address *</label>
-              <input
-                type="text"
-                value={formData.deliveryAddress}
-                onChange={(e) => setFormData({ ...formData, deliveryAddress: e.target.value })}
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-            <textarea
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              rows={2}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Date</label>
+            <input
+              type="date"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              value={form.expectedDelivery}
+          onChange={(e) => setForm({ ...form, expectedDelivery: e.target.value })}
             />
           </div>
         </div>
 
-        {/* Items */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-gray-900">Order Items</h2>
-            <button
-              type="button"
-              onClick={addItem}
-              className="flex items-center gap-2 text-sm text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg"
-            >
-              <Plus size={16} />
-              Add Item
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-gray-700">Items *</label>
+            <button type="button" onClick={addItem} className="text-sm text-blue-600 hover:underline">
+              + Add item
             </button>
           </div>
-
-          <div className="space-y-3">
-            {orderItems.map((item, index) => (
-              <div key={index} className="grid grid-cols-12 gap-3 items-end">
-                <div className="col-span-4">
-                  {index === 0 && <label className="block text-xs text-gray-500 mb-1">Item</label>}
+          <div className="space-y-2">
+            {form.items.map((entry, idx) => {
+              const itemObj = items.find((i) => i._id === entry.itemId);
+              const lineTotal = itemObj ? itemObj.standardPrice * entry.quantity : 0;
+              return (
+                <div key={idx} className="flex gap-2 items-center bg-gray-50 rounded-lg p-2">
                   <select
-                    value={item.itemId}
-                    onChange={(e) => handleItemChange(index, 'itemId', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    value={entry.itemId}
+                  onChange={(e) => handleItemChange(idx, 'itemId', e.target.value)}
+                    required
                   >
-                    <option value="">Select item</option>
-                    {items.map(i => (
-                      <option key={i._id} value={i._id}>{i.name}</option>
+                    <option value="">Select item...</option>
+                    {items.map((i) => (
+                      <option key={i._id} value={i._id}>
+                        {i.name} (₹{i.standardPrice}/{i.unit})
+                      </option>
                     ))}
                   </select>
-                </div>
-                <div className="col-span-2">
-                  {index === 0 && <label className="block text-xs text-gray-500 mb-1">Qty</label>}
                   <input
                     type="number"
                     min="1"
-                    value={item.quantity}
-                    onChange={(e) => handleItemChange(index, 'quantity', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-20 border border-gray-300 rounded-lg px-2 py-2 text-sm"
+                    value={entry.quantity}
+                    onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
                   />
-                </div>
-                <div className="col-span-2">
-                  {index === 0 && <label className="block text-xs text-gray-500 mb-1">Unit</label>}
-                  <input
-                    type="text"
-                    value={item.unit}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50"
-                  />
-                </div>
-                <div className="col-span-3">
-                  {index === 0 && <label className="block text-xs text-gray-500 mb-1">Unit Price (₹)</label>}
-                  <input
-                    type="number"
-                    value={item.unitPrice}
-                    onChange={(e) => handleItemChange(index, 'unitPrice', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div className="col-span-1">
-                  {orderItems.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeItem(index)}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
-                    >
-                      <Trash2 size={16} />
+                  <span className="text-sm text-gray-600 w-24 text-right font-medium">
+                    ₹{lineTotal.toLocaleString()}
+                  </span>
+                  {form.items.length > 1 && (
+                    <button type="button" onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 text-lg">
+                      ×
                     </button>
                   )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
-
-          {/* Total */}
-          <div className="flex justify-end pt-4 border-t border-gray-100">
-            <div className="text-right">
-              <p className="text-sm text-gray-500">Total Amount</p>
-              <p className="text-2xl font-bold text-gray-900">₹{totalAmount.toLocaleString('en-IN')}</p>
-            </div>
+          <div className="mt-2 text-right">
+            <span className="text-sm text-gray-500">Total: </span>
+            <span className="text-lg font-bold text-gray-900">₹{previewTotal.toLocaleString()}</span>
           </div>
         </div>
 
-        {/* Submit */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+          <textarea
+            rows={3}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+            value={form.notes}
+            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            placeholder="Additional notes or special requirements..."
+          />
+        </div>
+
         <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => navigate('/po')}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-          >
-            Cancel
-          </button>
           <button
             type="submit"
             disabled={loading}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className={`px-6 py-2 rounded-lg font-medium text-white ${
+              budgetOver ? 'bg-orange-500 hover:bg-orange-600' : 'bg-blue-600 hover:bg-blue-700'
+            } disabled:opacity-50`}
           >
-            {loading ? 'Creating...' : 'Create Purchase Order'}
+            {loading ? 'Creating...' : budgetOver ? 'Create Anyway (Over Budget)' : 'Create PO'}
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/po')}
+            className="px-6 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+          >
+            Cancel
           </button>
         </div>
       </form>
     </div>
   );
-};
-
-export default POCreate;
+}

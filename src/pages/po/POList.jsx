@@ -26,7 +26,7 @@ const POList = () => {
   const fetchPOs = async () => {
     try {
       const res = await axiosInstance.get('/po');
-      setPOs(res.data.pos);
+      setPOs(res.data.data || []);
     } catch (error) {
       toast.error('Failed to fetch purchase orders');
     } finally {

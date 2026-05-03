@@ -1,16 +1,19 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LayoutDashboard, Building2, FileText, Package } from 'lucide-react';
-
+import { LayoutDashboard, Building2, FileText, Package, Truck } from 'lucide-react';
 const Sidebar = () => {
   const { user } = useAuth();
 
-  const navItems = [
-    { path: '/', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
-    { path: '/vendors', label: 'Vendors', icon: <Building2 size={18} /> },
-    { path: '/items', label: 'Item Catalog', icon: <Package size={18} /> },
-    { path: '/po', label: 'Purchase Orders', icon: <FileText size={18} /> },
-  ];
+  const navItems = user?.role === 'vendor'
+    ? [
+        { path: '/vendor-dashboard', label: 'Vendor Portal', icon: <Truck size={18} /> },
+      ]
+    : [
+        { path: '/', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
+        { path: '/vendors', label: 'Vendors', icon: <Building2 size={18} /> },
+        { path: '/items', label: 'Item Catalog', icon: <Package size={18} /> },
+        { path: '/po', label: 'Purchase Orders', icon: <FileText size={18} /> },
+      ];
 
   return (
    
