@@ -8,6 +8,8 @@ import {
 
 const STATUS_COLORS = {
   draft: '#9ca3af',
+  pending_quote: '#f97316',
+  quoted: '#a78bfa',
   pending_approval: '#fbbf24',
   approved: '#34d399',
   rejected: '#f87171',
@@ -21,7 +23,7 @@ const CustomTooltipBudget = ({ active, payload, label }) => {
       <p className="font-semibold text-gray-800 mb-1">{label}</p>
       {payload.map((p) => (
         <p key={p.name} style={{ color: p.fill || p.color }}>
-          {p.name}: ${p.value.toLocaleString()}
+          {p.name}: ₹{p.value.toLocaleString()}
         </p>
       ))}
       {payload.length >= 2 && (
@@ -35,7 +37,7 @@ const CustomTooltipBudget = ({ active, payload, label }) => {
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState({ total: 0, draft: 0, pending: 0, approved: 0, fulfilled: 0 });
+  const [stats, setStats] = useState({ total: 0, draft: 0, pendingQuote: 0, quoted: 0, pending: 0, approved: 0, fulfilled: 0 });
   const [monthlySpend, setMonthlySpend] = useState([]);
   const [budgetData, setBudgetData] = useState([]);
   const [statusPieData, setStatusPieData] = useState([]);
@@ -55,6 +57,8 @@ export default function Dashboard() {
         setStats({
           total: pos.length,
           draft: pos.filter((p) => p.status === 'draft').length,
+          pendingQuote: pos.filter((p) => p.status === 'pending_quote').length,
+          quoted: pos.filter((p) => p.status === 'quoted').length,
           pending: pos.filter((p) => p.status === 'pending_approval').length,
           approved: pos.filter((p) => p.status === 'approved').length,
           fulfilled: pos.filter((p) => p.status === 'fulfilled').length,
@@ -62,7 +66,11 @@ export default function Dashboard() {
 
         const statusCounts = {};
         pos.forEach((p) => { statusCounts[p.status] = (statusCounts[p.status] || 0) + 1; });
-        setStatusPieData(Object.entries(statusCounts).map(([name, value]) => ({ name: name.replace('_', ' '), value, key: name })));
+        setStatusPieData(Object.entries(statusCounts).map(([name, value]) => ({
+          name: name.replace(/_/g, ' '),
+          value,
+          key: name
+        })));
 
         const months = {};
         pos.filter((p) => p.status === 'fulfilled').forEach((p) => {
@@ -114,13 +122,15 @@ export default function Dashboard() {
         <p className="text-gray-500 text-sm">Welcome back, {user?.name}</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
         {[
-          { label: 'Total POs',  value: stats.total,     bg: 'bg-gray-50',   border: 'border-gray-200',   text: 'text-gray-800' },
-          { label: 'Draft',      value: stats.draft,     bg: 'bg-gray-50',   border: 'border-gray-200',   text: 'text-gray-700' },
-          { label: 'Pending',    value: stats.pending,   bg: 'bg-yellow-50', border: 'border-yellow-200', text: 'text-yellow-700' },
-          { label: 'Approved',   value: stats.approved,  bg: 'bg-green-50',  border: 'border-green-200',  text: 'text-green-700' },
-          { label: 'Fulfilled',  value: stats.fulfilled, bg: 'bg-blue-50',   border: 'border-blue-200',   text: 'text-blue-700' },
+          { label: 'Total POs',       value: stats.total,        bg: 'bg-gray-50',    border: 'border-gray-200',   text: 'text-gray-800' },
+          { label: 'Draft',           value: stats.draft,        bg: 'bg-gray-50',    border: 'border-gray-200',   text: 'text-gray-700' },
+          { label: 'Awaiting Quote',  value: stats.pendingQuote, bg: 'bg-orange-50',  border: 'border-orange-200', text: 'text-orange-700' },
+          { label: 'Quoted',          value: stats.quoted,       bg: 'bg-purple-50',  border: 'border-purple-200', text: 'text-purple-700' },
+          { label: 'In Approval',     value: stats.pending,      bg: 'bg-yellow-50',  border: 'border-yellow-200', text: 'text-yellow-700' },
+          { label: 'Approved',        value: stats.approved,     bg: 'bg-green-50',   border: 'border-green-200',  text: 'text-green-700' },
+          { label: 'Fulfilled',       value: stats.fulfilled,    bg: 'bg-blue-50',    border: 'border-blue-200',   text: 'text-blue-700' },
         ].map((s) => (
           <div key={s.label} className={`${s.bg} border ${s.border} rounded-xl p-4`}>
             <p className="text-xs text-gray-500 font-medium">{s.label}</p>
@@ -136,7 +146,7 @@ export default function Dashboard() {
             <BarChart data={budgetData} margin={{ top: 0, right: 20, left: 20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+              <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
               <Tooltip content={<CustomTooltipBudget />} />
               <Legend />
               <Bar dataKey="Budget" fill="#bfdbfe" radius={[4, 4, 0, 0]} />
@@ -172,8 +182,8 @@ export default function Dashboard() {
               <BarChart data={monthlySpend}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v) => `$${v.toLocaleString()}`} />
+                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v) => `₹${v.toLocaleString()}`} />
                 <Bar dataKey="amount" fill="#6366f1" radius={[4, 4, 0, 0]} name="Spend" />
               </BarChart>
             </ResponsiveContainer>
@@ -187,14 +197,7 @@ export default function Dashboard() {
           {statusPieData.length > 0 ? (
             <div className="flex items-center gap-4">
               <PieChart width={160} height={160}>
-                <Pie
-                  data={statusPieData}
-                  cx={75} cy={75}
-                  innerRadius={45}
-                  outerRadius={70}
-                  dataKey="value"
-                  paddingAngle={2}
-                >
+                <Pie data={statusPieData} cx={75} cy={75} innerRadius={45} outerRadius={70} dataKey="value" paddingAngle={2}>
                   {statusPieData.map((entry) => (
                     <Cell key={entry.key} fill={STATUS_COLORS[entry.key] || '#9ca3af'} />
                   ))}
@@ -204,10 +207,7 @@ export default function Dashboard() {
               <div className="space-y-2">
                 {statusPieData.map((entry) => (
                   <div key={entry.key} className="flex items-center gap-2 text-sm">
-                    <span
-                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                      style={{ background: STATUS_COLORS[entry.key] || '#9ca3af' }}
-                    />
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: STATUS_COLORS[entry.key] || '#9ca3af' }} />
                     <span className="capitalize text-gray-700">{entry.name}</span>
                     <span className="ml-auto font-semibold text-gray-900">{entry.value}</span>
                   </div>
@@ -231,13 +231,10 @@ export default function Dashboard() {
                   <span className="text-xs font-bold text-gray-400 w-4">{i + 1}</span>
                   <span className="w-36 text-sm text-gray-700 truncate">{v.name}</span>
                   <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-2 rounded-full bg-indigo-400"
-                      style={{ width: `${(v.spend / maxSpend) * 100}%` }}
-                    />
+                    <div className="h-2 rounded-full bg-indigo-400" style={{ width: `${(v.spend / maxSpend) * 100}%` }} />
                   </div>
                   <span className="text-sm font-semibold text-gray-800 w-24 text-right">
-                    ${v.spend.toLocaleString()}
+                    ₹{v.spend.toLocaleString()}
                   </span>
                 </div>
               );

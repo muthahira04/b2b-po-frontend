@@ -25,13 +25,10 @@ export default function POCreate() {
     expectedDelivery: '',
     deliveryAddress: '',
     notes: '',
-    items: [{ itemId: '', quantity: 1, unitPrice: '' }],
+    items: [{ itemId: '', quantity: 1 }],
   });
-  const [budgetWarning, setBudgetWarning] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [previewTotal, setPreviewTotal] = useState(0);
-  const [budgetInfo, setBudgetInfo] = useState(null);
 
   useEffect(() => {
     axiosInstance.get('/vendors').then((r) => {
@@ -43,43 +40,15 @@ export default function POCreate() {
     axiosInstance.get('/company/budget').then((r) => setDepartments(r.data.data)).catch(() => {});
   }, []);
 
-  // Recalculate preview total using unitPrice from form state
-  useEffect(() => {
-    let total = 0;
-    form.items.forEach(({ unitPrice, quantity }) => {
-      const price = Number(unitPrice);
-      if (price > 0) total += price * Number(quantity);
-    });
-    setPreviewTotal(total);
-
-    if (form.department) {
-      const dept = departments.find((d) => d.name === form.department);
-      if (dept) setBudgetInfo({ ...dept, requested: total });
-      else setBudgetInfo(null);
-    } else {
-      setBudgetInfo(null);
-    }
-  }, [form.items, form.department, departments]);
-
   const handleItemChange = (idx, field, value) => {
     const updated = [...form.items];
-    if (field === 'quantity') {
-      updated[idx][field] = Number(value);
-    } else if (field === 'itemId') {
-      // Pre-fill unitPrice with standardPrice when item is selected
-      const selectedItem = items.find((i) => i._id === value);
-      updated[idx].itemId = value;
-      updated[idx].unitPrice = selectedItem ? selectedItem.standardPrice : '';
-    } else if (field === 'unitPrice') {
-      updated[idx][field] = value;
-    } else {
-      updated[idx][field] = value;
-    }
+    updated[idx][field] = field === 'quantity' ? Number(value) : value;
     setForm({ ...form, items: updated });
   };
 
   const addItem = () =>
-    setForm({ ...form, items: [...form.items, { itemId: '', quantity: 1, unitPrice: '' }] });
+    setForm({ ...form, items: [...form.items, { itemId: '', quantity: 1 }] });
+
   const removeItem = (idx) =>
     setForm({ ...form, items: form.items.filter((_, i) => i !== idx) });
 
@@ -87,12 +56,8 @@ export default function POCreate() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    setBudgetWarning(null);
     try {
       const res = await axiosInstance.post('/po', form);
-      if (res.data.budgetWarning) {
-        setBudgetWarning(res.data.budgetWarning);
-      }
       navigate(`/po/${res.data.data._id}`);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create PO');
@@ -102,57 +67,23 @@ export default function POCreate() {
   };
 
   const selectedVendor = vendors.find((v) => v._id === form.vendorId);
-  const budgetOver = budgetInfo && budgetInfo.requested > budgetInfo.remaining;
 
   return (
     <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Create Purchase Order</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">Create Purchase Order</h1>
+      <p className="text-sm text-gray-500 mb-6">
+        Create the PO with items and quantities. Once created, send it to the vendor for pricing.
+      </p>
 
       {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
           {error}
         </div>
       )}
 
-      {budgetInfo && (
-        <div className={`mb-4 px-4 py-3 rounded-lg border ${budgetOver ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300'}`}>
-          <div className="flex items-center justify-between mb-1">
-            <span className={`font-semibold text-sm ${budgetOver ? 'text-red-700' : 'text-green-700'}`}>
-              {budgetOver ? '⚠ Budget Exceeded' : '✓ Within Budget'} — {budgetInfo.name}
-            </span>
-          </div>
-          <div className="grid grid-cols-3 gap-4 text-sm mt-2">
-            <div>
-              <p className="text-gray-500">Monthly budget</p>
-              <p className="font-semibold text-gray-800">₹{budgetInfo.monthlyBudget.toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-gray-500">Already spent</p>
-              <p className="font-semibold text-gray-800">₹{budgetInfo.spent.toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-gray-500">Remaining</p>
-              <p className={`font-semibold ${budgetOver ? 'text-red-600' : 'text-green-600'}`}>
-                ₹{budgetInfo.remaining.toLocaleString()}
-              </p>
-            </div>
-          </div>
-          {budgetOver && (
-            <p className="mt-2 text-sm text-red-600 font-medium">
-              This PO (₹{previewTotal.toLocaleString()}) exceeds remaining budget by ₹
-              {(previewTotal - budgetInfo.remaining).toLocaleString()}. It will still be saved as a draft.
-            </p>
-          )}
-          <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className={`h-2 rounded-full transition-all ${budgetOver ? 'bg-red-500' : 'bg-green-500'}`}
-              style={{ width: `${Math.min(100, ((budgetInfo.spent + previewTotal) / budgetInfo.monthlyBudget) * 100)}%` }}
-            />
-          </div>
-        </div>
-      )}
-
       <form onSubmit={handleSubmit} className="space-y-6">
+
+        {/* Vendor */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Vendor *</label>
           <select
@@ -199,6 +130,7 @@ export default function POCreate() {
           )}
         </div>
 
+        {/* Department + Delivery Date */}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
@@ -216,7 +148,7 @@ export default function POCreate() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Date</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Expected Delivery Date</label>
             <input
               type="date"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
@@ -226,27 +158,26 @@ export default function POCreate() {
           </div>
         </div>
 
+        {/* Items */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium text-gray-700">Items *</label>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Items *</label>
+              <p className="text-xs text-gray-400">Vendor will provide pricing after receiving this PO</p>
+            </div>
             <button type="button" onClick={addItem} className="text-sm text-blue-600 hover:underline">
               + Add item
             </button>
           </div>
 
-          {/* Column headers */}
           <div className="flex gap-2 px-2 mb-1 text-xs font-medium text-gray-500">
             <span className="flex-1">Item</span>
-            <span className="w-20 text-center">Qty</span>
-            <span className="w-28 text-center">Unit Price (₹)</span>
-            <span className="w-24 text-right">Total</span>
+            <span className="w-24 text-center">Quantity</span>
             <span className="w-6" />
           </div>
 
           <div className="space-y-2">
             {form.items.map((entry, idx) => {
-              const unitPrice = Number(entry.unitPrice) || 0;
-              const lineTotal = unitPrice * Number(entry.quantity);
               const itemObj = items.find((i) => i._id === entry.itemId);
               return (
                 <div key={idx} className="flex gap-2 items-center bg-gray-50 rounded-lg p-2">
@@ -259,7 +190,7 @@ export default function POCreate() {
                     <option value="">Select item...</option>
                     {items.map((i) => (
                       <option key={i._id} value={i._id}>
-                        {i.name} ({i.unit}) — std ₹{i.standardPrice}
+                        {i.name} ({i.unit})
                       </option>
                     ))}
                   </select>
@@ -267,26 +198,10 @@ export default function POCreate() {
                   <input
                     type="number"
                     min="1"
-                    className="w-20 border border-gray-300 rounded-lg px-2 py-2 text-sm text-center"
+                    className="w-24 border border-gray-300 rounded-lg px-2 py-2 text-sm text-center"
                     value={entry.quantity}
                     onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
                   />
-
-                  {/* Editable unit price — pre-filled from standardPrice */}
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="w-28 border border-gray-300 rounded-lg px-2 py-2 text-sm text-right"
-                    value={entry.unitPrice}
-                    onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)}
-                    placeholder="0.00"
-                    required
-                  />
-
-                  <span className="text-sm text-gray-700 w-24 text-right font-medium">
-                    ₹{lineTotal.toLocaleString()}
-                  </span>
 
                   {form.items.length > 1 && (
                     <button
@@ -302,12 +217,27 @@ export default function POCreate() {
             })}
           </div>
 
-          <div className="mt-2 text-right">
-            <span className="text-sm text-gray-500">Total: </span>
-            <span className="text-lg font-bold text-gray-900">₹{previewTotal.toLocaleString()}</span>
-          </div>
+          {/* Reference prices note */}
+          {form.items.some((e) => e.itemId) && (
+            <div className="mt-2 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+              <p className="text-xs text-blue-600 font-medium mb-1">Reference standard prices (from your catalog):</p>
+              <div className="space-y-0.5">
+                {form.items.filter((e) => e.itemId).map((entry, idx) => {
+                  const itemObj = items.find((i) => i._id === entry.itemId);
+                  if (!itemObj) return null;
+                  return (
+                    <p key={idx} className="text-xs text-blue-500">
+                      {itemObj.name}: ₹{itemObj.standardPrice}/{itemObj.unit} × {entry.quantity} = est. ₹{(itemObj.standardPrice * entry.quantity).toLocaleString()}
+                    </p>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-blue-400 mt-1">Actual prices will be set by the vendor when they quote.</p>
+            </div>
+          )}
         </div>
 
+        {/* Delivery Address */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Address</label>
           <input
@@ -315,10 +245,11 @@ export default function POCreate() {
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
             value={form.deliveryAddress}
             onChange={(e) => setForm({ ...form, deliveryAddress: e.target.value })}
-            placeholder="Delivery address..."
+            placeholder="Where should the vendor deliver?"
           />
         </div>
 
+        {/* Notes */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
           <textarea
@@ -326,19 +257,27 @@ export default function POCreate() {
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
             value={form.notes}
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            placeholder="Additional notes or special requirements..."
+            placeholder="Special requirements, quality specs, packaging instructions..."
           />
+        </div>
+
+        {/* Flow reminder */}
+        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-xs text-gray-500">
+          <p className="font-medium text-gray-600 mb-1">What happens next:</p>
+          <p>1. PO is saved as <span className="font-medium">Draft</span></p>
+          <p>2. You send it to the vendor → status becomes <span className="font-medium">Pending Quote</span></p>
+          <p>3. Vendor logs in, enters prices and confirms which items they can supply</p>
+          <p>4. You review the quote → submit for internal approval</p>
+          <p>5. Approvers approve → vendor fulfills</p>
         </div>
 
         <div className="flex gap-3">
           <button
             type="submit"
             disabled={loading}
-            className={`px-6 py-2 rounded-lg font-medium text-white ${
-              budgetOver ? 'bg-orange-500 hover:bg-orange-600' : 'bg-blue-600 hover:bg-blue-700'
-            } disabled:opacity-50`}
+            className="px-6 py-2 rounded-lg font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
           >
-            {loading ? 'Creating...' : budgetOver ? 'Create Anyway (Over Budget)' : 'Create PO'}
+            {loading ? 'Creating...' : 'Create PO'}
           </button>
           <button
             type="button"
