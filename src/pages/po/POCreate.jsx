@@ -25,7 +25,7 @@ export default function POCreate() {
     expectedDelivery: '',
     deliveryAddress: '',
     notes: '',
-    items: [{ itemId: '', quantity: 1 }],
+    items: [{ itemId: '', quantity: 1, unitPrice: '' }],
   });
   const [budgetWarning, setBudgetWarning] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -43,11 +43,12 @@ export default function POCreate() {
     axiosInstance.get('/company/budget').then((r) => setDepartments(r.data.data)).catch(() => {});
   }, []);
 
+  // Recalculate preview total using unitPrice from form state
   useEffect(() => {
     let total = 0;
-   form.items.forEach(({ itemId, quantity }) => {
-      const found = items.find((i) => i._id === itemId);
-      if (found) total += found.standardPrice * quantity;
+    form.items.forEach(({ unitPrice, quantity }) => {
+      const price = Number(unitPrice);
+      if (price > 0) total += price * Number(quantity);
     });
     setPreviewTotal(total);
 
@@ -58,16 +59,29 @@ export default function POCreate() {
     } else {
       setBudgetInfo(null);
     }
-  }, [form.items, form.department, items, departments]);
+  }, [form.items, form.department, departments]);
 
   const handleItemChange = (idx, field, value) => {
     const updated = [...form.items];
-    updated[idx][field] = field === 'quantity' ? Number(value) : value;
+    if (field === 'quantity') {
+      updated[idx][field] = Number(value);
+    } else if (field === 'itemId') {
+      // Pre-fill unitPrice with standardPrice when item is selected
+      const selectedItem = items.find((i) => i._id === value);
+      updated[idx].itemId = value;
+      updated[idx].unitPrice = selectedItem ? selectedItem.standardPrice : '';
+    } else if (field === 'unitPrice') {
+      updated[idx][field] = value;
+    } else {
+      updated[idx][field] = value;
+    }
     setForm({ ...form, items: updated });
   };
 
-  const addItem = () => setForm({ ...form, items: [...form.items, { item: '', quantity: 1 }] });
-  const removeItem = (idx) => setForm({ ...form, items: form.items.filter((_, i) => i !== idx) });
+  const addItem = () =>
+    setForm({ ...form, items: [...form.items, { itemId: '', quantity: 1, unitPrice: '' }] });
+  const removeItem = (idx) =>
+    setForm({ ...form, items: form.items.filter((_, i) => i !== idx) });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -87,7 +101,7 @@ export default function POCreate() {
     }
   };
 
- const selectedVendor = vendors.find((v) => v._id === form.vendorId); 
+  const selectedVendor = vendors.find((v) => v._id === form.vendorId);
   const budgetOver = budgetInfo && budgetInfo.requested > budgetInfo.remaining;
 
   return (
@@ -110,22 +124,22 @@ export default function POCreate() {
           <div className="grid grid-cols-3 gap-4 text-sm mt-2">
             <div>
               <p className="text-gray-500">Monthly budget</p>
-              <p className="font-semibold text-gray-800">${budgetInfo.monthlyBudget.toLocaleString()}</p>
+              <p className="font-semibold text-gray-800">₹{budgetInfo.monthlyBudget.toLocaleString()}</p>
             </div>
             <div>
               <p className="text-gray-500">Already spent</p>
-              <p className="font-semibold text-gray-800">${budgetInfo.spent.toLocaleString()}</p>
+              <p className="font-semibold text-gray-800">₹{budgetInfo.spent.toLocaleString()}</p>
             </div>
             <div>
               <p className="text-gray-500">Remaining</p>
               <p className={`font-semibold ${budgetOver ? 'text-red-600' : 'text-green-600'}`}>
-                ${budgetInfo.remaining.toLocaleString()}
+                ₹{budgetInfo.remaining.toLocaleString()}
               </p>
             </div>
           </div>
           {budgetOver && (
             <p className="mt-2 text-sm text-red-600 font-medium">
-              This PO (${previewTotal.toLocaleString()}) exceeds remaining budget by $
+              This PO (₹{previewTotal.toLocaleString()}) exceeds remaining budget by ₹
               {(previewTotal - budgetInfo.remaining).toLocaleString()}. It will still be saved as a draft.
             </p>
           )}
@@ -144,7 +158,7 @@ export default function POCreate() {
           <select
             className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
             value={form.vendorId}
-          onChange={(e) => setForm({ ...form, vendorId: e.target.value })}
+            onChange={(e) => setForm({ ...form, vendorId: e.target.value })}
             required
           >
             <option value="">Select vendor...</option>
@@ -164,7 +178,9 @@ export default function POCreate() {
                   type="button"
                   onClick={() => setForm({ ...form, vendorId: v._id })}
                   className={`text-xs px-2 py-1 rounded-full border transition-all ${
-                    form.vendorId === v._id ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:border-blue-300'
+                    form.vendorId === v._id
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 hover:border-blue-300'
                   }`}
                 >
                   ★ {v.businessName}
@@ -194,7 +210,7 @@ export default function POCreate() {
               <option value="">Select department...</option>
               {departments.map((d) => (
                 <option key={d.id} value={d.name}>
-                  {d.name} (Remaining: ${d.remaining.toLocaleString()})
+                  {d.name} (Remaining: ₹{d.remaining.toLocaleString()})
                 </option>
               ))}
             </select>
@@ -205,7 +221,7 @@ export default function POCreate() {
               type="date"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
               value={form.expectedDelivery}
-          onChange={(e) => setForm({ ...form, expectedDelivery: e.target.value })}
+              onChange={(e) => setForm({ ...form, expectedDelivery: e.target.value })}
             />
           </div>
         </div>
@@ -217,37 +233,67 @@ export default function POCreate() {
               + Add item
             </button>
           </div>
+
+          {/* Column headers */}
+          <div className="flex gap-2 px-2 mb-1 text-xs font-medium text-gray-500">
+            <span className="flex-1">Item</span>
+            <span className="w-20 text-center">Qty</span>
+            <span className="w-28 text-center">Unit Price (₹)</span>
+            <span className="w-24 text-right">Total</span>
+            <span className="w-6" />
+          </div>
+
           <div className="space-y-2">
             {form.items.map((entry, idx) => {
+              const unitPrice = Number(entry.unitPrice) || 0;
+              const lineTotal = unitPrice * Number(entry.quantity);
               const itemObj = items.find((i) => i._id === entry.itemId);
-              const lineTotal = itemObj ? itemObj.standardPrice * entry.quantity : 0;
               return (
                 <div key={idx} className="flex gap-2 items-center bg-gray-50 rounded-lg p-2">
                   <select
                     className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
                     value={entry.itemId}
-                  onChange={(e) => handleItemChange(idx, 'itemId', e.target.value)}
+                    onChange={(e) => handleItemChange(idx, 'itemId', e.target.value)}
                     required
                   >
                     <option value="">Select item...</option>
                     {items.map((i) => (
                       <option key={i._id} value={i._id}>
-                        {i.name} (₹{i.standardPrice}/{i.unit})
+                        {i.name} ({i.unit}) — std ₹{i.standardPrice}
                       </option>
                     ))}
                   </select>
+
                   <input
                     type="number"
                     min="1"
-                    className="w-20 border border-gray-300 rounded-lg px-2 py-2 text-sm"
+                    className="w-20 border border-gray-300 rounded-lg px-2 py-2 text-sm text-center"
                     value={entry.quantity}
                     onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
                   />
-                  <span className="text-sm text-gray-600 w-24 text-right font-medium">
+
+                  {/* Editable unit price — pre-filled from standardPrice */}
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="w-28 border border-gray-300 rounded-lg px-2 py-2 text-sm text-right"
+                    value={entry.unitPrice}
+                    onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)}
+                    placeholder="0.00"
+                    required
+                  />
+
+                  <span className="text-sm text-gray-700 w-24 text-right font-medium">
                     ₹{lineTotal.toLocaleString()}
                   </span>
+
                   {form.items.length > 1 && (
-                    <button type="button" onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 text-lg">
+                    <button
+                      type="button"
+                      onClick={() => removeItem(idx)}
+                      className="text-red-400 hover:text-red-600 text-lg w-6 text-center"
+                    >
                       ×
                     </button>
                   )}
@@ -255,10 +301,22 @@ export default function POCreate() {
               );
             })}
           </div>
+
           <div className="mt-2 text-right">
             <span className="text-sm text-gray-500">Total: </span>
             <span className="text-lg font-bold text-gray-900">₹{previewTotal.toLocaleString()}</span>
           </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Address</label>
+          <input
+            type="text"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+            value={form.deliveryAddress}
+            onChange={(e) => setForm({ ...form, deliveryAddress: e.target.value })}
+            placeholder="Delivery address..."
+          />
         </div>
 
         <div>

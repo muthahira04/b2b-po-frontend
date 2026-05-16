@@ -100,6 +100,11 @@ export default function Dashboard() {
     load();
   }, []);
 
+  if (user?.role === 'vendor') {
+    window.location.replace('/vendor-dashboard');
+    return null;
+  }
+
   if (loading) return <div className="p-8 text-center text-gray-500">Loading dashboard...</div>;
 
   return (

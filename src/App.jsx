@@ -27,7 +27,7 @@ const AppRoutes = () => {
     <Routes>
       <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-        <Route index element={<Dashboard />} />
+        <Route index element={user?.role === 'vendor' ? <Navigate to="/vendor-dashboard" /> : <Dashboard />} />
         <Route path="vendors" element={<VendorList />} />
         <Route path="vendors/new" element={<VendorForm />} />
         <Route path="vendors/:id/edit" element={<VendorForm />} />
