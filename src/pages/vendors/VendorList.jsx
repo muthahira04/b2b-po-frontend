@@ -117,7 +117,8 @@ export default function VendorList() {
           const cfg = getRiskConfig(v.riskScore ?? 0);
           const { Icon } = cfg;
           return (
-            <Link key={v._id} to={`/vendors/${v._id}/edit`} className="block">
+            // FLAW 8 FIX: link to detail page, not edit
+            <Link key={v._id} to={`/vendors/${v._id}`} className="block">
               <div className={`bg-white border ${cfg.cardBorder} rounded-xl p-4 hover:shadow-md transition-shadow`}>
                 <div className="flex items-start justify-between mb-2">
                   <h3 className="font-semibold text-gray-900">{v.businessName || v.name}</h3>
