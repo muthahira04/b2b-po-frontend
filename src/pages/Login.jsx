@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import axiosInstance from '../utils/axiosInstance.jsx';
 import { toast } from 'react-toastify';
@@ -85,6 +86,15 @@ const Login = () => {
           <p className="text-xs text-gray-600">Email: admin@procuredesk.com</p>
           <p className="text-xs text-gray-600">Password: 123456</p>
         </div>
+
+        {/* Register link — added here, below demo credentials */}
+        <p className="text-center text-sm text-gray-500 mt-4">
+          New company?{' '}
+          <Link to="/register" className="text-blue-600 font-medium hover:underline">
+            Register your workspace
+          </Link>
+        </p>
+
       </div>
     </div>
   );
